@@ -1,4 +1,4 @@
-//! Read queries — typed, transport-agnostic reads of entity state (plan §5).
+//! Read queries — typed, transport-agnostic reads of entity state.
 //! The `Query` enum is **hand-maintained** (append-only) in `src/gen/query_gen.rs`
 //! — NOT derived from the spec by build.rs (the spec's `query` names must map to
 //! a variant here, asserted by a test). This module re-exports it and holds the
@@ -19,8 +19,16 @@ pub struct Aabb {
 }
 
 impl Aabb {
+    #[cfg(feature = "host")]
     pub fn overlaps(&self, other: &Aabb) -> bool {
-        (0..3).all(|i| self.min[i] <= other.max[i] && other.min[i] <= self.max[i])
+        cadkernel::brep::Aabb {
+            min: self.min,
+            max: self.max,
+        }
+        .overlaps(&cadkernel::brep::Aabb {
+            min: other.min,
+            max: other.max,
+        })
     }
 }
 
@@ -56,7 +64,10 @@ pub enum QueryResult {
     /// The entities inside a block definition (read-only traversal).
     BlockEntities(Vec<EntityView>),
     /// A viewport's view: target point (WCS) + zoom height.
-    ViewportView { target: [f64; 3], height: f64 },
+    ViewportView {
+        target: [f64; 3],
+        height: f64,
+    },
 }
 
 /// Convenience: the query name for diagnostics.
