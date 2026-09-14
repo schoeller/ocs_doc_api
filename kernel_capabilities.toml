@@ -1,0 +1,15 @@
+[[capability]]
+entity = "Line"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+
+[[capability]]
+entity = "Circle"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+
+[[capability]]
+entity = "LwPolyline"
+name = "offset"
+output = "Vec<cadkernel::geom2d::Polyline>"
+requires = "planar, non-self-intersecting"

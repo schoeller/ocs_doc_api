@@ -1,0 +1,31 @@
+[[op]]
+name = "CreateDocument"
+description = "Create a new empty document and set it as the active document."
+
+[[op]]
+name = "GetDocument"
+description = "Return a lightweight snapshot of the active document."
+
+[[op]]
+name = "ListEntities"
+description = "List every entity in the active document as (handle, payload) pairs."
+
+[[op]]
+name = "CreateEntity"
+description = "Add a new entity from an `EntityPayload`. A unique handle is allocated."
+
+[[op]]
+name = "ReadEntity"
+description = "Return the `EntityPayload` for the entity with the given handle."
+
+[[op]]
+name = "UpdateEntity"
+description = "Replace the entity at the given handle with a new payload."
+
+[[op]]
+name = "DeleteEntity"
+description = "Remove the entity with the given handle from the document."
+
+[[op]]
+name = "OffsetEntity"
+description = "Offset a supported entity by a distance. First milestone supports `LwPolyline`."
