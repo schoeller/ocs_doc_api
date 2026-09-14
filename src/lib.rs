@@ -3,6 +3,9 @@
 
 pub mod schema;
 
+#[cfg(any(test, feature = "engine", feature = "kernel"))]
+pub mod entity_samples;
+
 #[cfg(feature = "engine")]
 pub mod doc_api;
 
@@ -25,7 +28,7 @@ pub use doc_api::{
 };
 
 /// Public 64-bit handle wrapper with conversions to/from `acadrust::Handle`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Handle(pub u64);
 
@@ -38,12 +41,6 @@ impl From<u64> for Handle {
 impl From<Handle> for u64 {
     fn from(handle: Handle) -> Self {
         handle.0
-    }
-}
-
-impl Default for Handle {
-    fn default() -> Self {
-        Handle(0)
     }
 }
 

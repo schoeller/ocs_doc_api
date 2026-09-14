@@ -1,3 +1,16 @@
+# Kernel capabilities attached to acadrust entity types in the generated
+# object model. Every entity listed here must have a corresponding
+# `KernelOps` implementation in `src/kernel_ops.rs`.
+
+# -----------------------------------------------------------------------------
+# Planar curve extraction
+# -----------------------------------------------------------------------------
+# `to_planar_curve` returns `Option<PlanarCurve>` for entities that can be
+# represented as a 2-D curve lying on a plane parallel to the world XY plane.
+# The implementation in `src/kernel_ops.rs` currently requires a default
+# extrusion normal (world Z) and level geometry; non-default normals or 3-D
+# shapes return `None`.
+
 [[capability]]
 entity = "Line"
 name = "to_planar_curve"
@@ -9,7 +22,231 @@ name = "to_planar_curve"
 output = "Option<cadkernel::space::PlanarCurve>"
 
 [[capability]]
+entity = "Arc"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+
+[[capability]]
+entity = "Ellipse"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+
+[[capability]]
+entity = "Spline"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "planar"
+
+[[capability]]
+entity = "Polyline"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "planar"
+
+[[capability]]
+entity = "Polyline2D"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "planar"
+
+[[capability]]
+entity = "Polyline3D"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "planar"
+
+[[capability]]
+entity = "LwPolyline"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "planar, non-self-intersecting"
+
+[[capability]]
+entity = "Ray"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+
+[[capability]]
+entity = "XLine"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+
+# Helix is a 3-D spiral and has no faithful planar projection. The trait
+# implementation deliberately returns `None`; the capability is listed so the
+# registry documents the deliberate exclusion.
+[[capability]]
+entity = "Helix"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "planar projection (not supported)"
+
+# -----------------------------------------------------------------------------
+# Planar annotation primitives
+# -----------------------------------------------------------------------------
+# Annotation entities that have a single insertion point on the XY plane.
+# `to_planar_curve` returns `None` because these are not curves, but the
+# capability marks them as kernel-recognizable planar annotation objects.
+
+[[capability]]
+entity = "Point"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; represented as point marker"
+
+[[capability]]
+entity = "Text"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; text glyph extraction not supported"
+
+[[capability]]
+entity = "MText"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; text glyph extraction not supported"
+
+[[capability]]
+entity = "Tolerance"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; GD&T frame extraction not supported"
+
+[[capability]]
+entity = "AttributeDefinition"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; text glyph extraction not supported"
+
+[[capability]]
+entity = "AttributeEntity"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; text glyph extraction not supported"
+
+[[capability]]
+entity = "Shape"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; shape glyph extraction not supported"
+
+# -----------------------------------------------------------------------------
+# Hatch and filled boundaries
+# -----------------------------------------------------------------------------
+# Hatches, solids, and wipeouts are bounded 2-D regions. They are not curves,
+# but `to_planar_curve` accepts a generic `Option<PlanarCurve>` return so the
+# registry can record that the kernel recognizes them as planar regions.
+
+[[capability]]
+entity = "Hatch"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; boundary extraction not supported"
+
+[[capability]]
+entity = "Solid"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "triangular or quadrilateral face; tessellation not supported"
+
+[[capability]]
+entity = "Wipeout"
+name = "to_planar_curve"
+output = "Option<cadkernel::space::PlanarCurve>"
+requires = "not a curve; clipping boundary extraction not supported"
+
+# -----------------------------------------------------------------------------
+# Block reference capabilities
+# -----------------------------------------------------------------------------
+# Block references can be exploded into world-space entities and can report an
+# axis-aligned bounding box. `explode` is the primary kernel operation for
+# inserts.
+
+[[capability]]
+entity = "Insert"
+name = "explode"
+output = "Vec<acadrust::entities::EntityType>"
+requires = "block definition must be available (not supported)"
+
+[[capability]]
+entity = "Insert"
+name = "bounding_box"
+output = "acadrust::types::BoundingBox3D"
+requires = "block definition must be available (not supported)"
+
+[[capability]]
+entity = "Block"
+name = "bounding_box"
+output = "acadrust::types::BoundingBox3D"
+requires = "block definition must be available (not supported)"
+
+# -----------------------------------------------------------------------------
+# 3-D solid / surface / mesh capabilities
+# -----------------------------------------------------------------------------
+# These entities are backed by ACIS data, meshes, or procedural surfaces.
+# `to_mesh` and `bounding_box` are the primary kernel operations.
+
+[[capability]]
+entity = "Solid3D"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "ACIS data available; tessellation not supported"
+
+[[capability]]
+entity = "Region"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "ACIS data available; tessellation not supported"
+
+[[capability]]
+entity = "Body"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "ACIS data available; tessellation not supported"
+
+[[capability]]
+entity = "Surface"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "surface data available; tessellation not supported"
+
+[[capability]]
+entity = "Mesh"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "mesh data already available; copy returned"
+
+[[capability]]
+entity = "PolyfaceMesh"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "mesh data already available; copy returned"
+
+[[capability]]
+entity = "PolygonMesh"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "mesh data already available; copy returned"
+
+[[capability]]
+entity = "Face3D"
+name = "to_mesh"
+output = "Option<acadrust::entities::Mesh>"
+requires = "triangular or quadrilateral face; tessellation not supported"
+
+# -----------------------------------------------------------------------------
+# Offset
+# -----------------------------------------------------------------------------
+# `offset` returns new lightweight polyline entities offset by a distance.
+# Only planar polylines are supported in the first milestone.
+
+[[capability]]
 entity = "LwPolyline"
 name = "offset"
-output = "Vec<cadkernel::geom2d::Polyline>"
+output = "Vec<acadrust::entities::LwPolyline>"
+requires = "planar, non-self-intersecting"
+
+[[capability]]
+entity = "Polyline2D"
+name = "offset"
+output = "Vec<acadrust::entities::LwPolyline>"
 requires = "planar, non-self-intersecting"

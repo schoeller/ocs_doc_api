@@ -1,6 +1,8 @@
 use crate::schema::{FieldInfo, TypeRegistry};
 use crate::Handle;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::OnceLock;
 /// A serializable entity representation used by `DocApi` operations.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EntityPayload {
@@ -183,25 +185,73 @@ pub trait DocApiExt: DocApi {
 
 impl<T: DocApi + ?Sized> DocApiExt for T {}
 
+const ENTITY_TYPE_NAMES: &[(&str, &str)] = &[
+    ("arc", "Arc"),
+    ("attributedefinition", "AttributeDefinition"),
+    ("attributeentity", "AttributeEntity"),
+    ("block", "Block"),
+    ("blockend", "BlockEnd"),
+    ("body", "Body"),
+    ("circle", "Circle"),
+    ("dimension", "Dimension"),
+    ("ellipse", "Ellipse"),
+    ("extended", "Extended"),
+    ("face3d", "Face3D"),
+    ("hatch", "Hatch"),
+    ("helix", "Helix"),
+    ("insert", "Insert"),
+    ("leader", "Leader"),
+    ("light", "Light"),
+    ("line", "Line"),
+    ("lwpolyline", "LwPolyline"),
+    ("mesh", "Mesh"),
+    ("mline", "MLine"),
+    ("mtext", "MText"),
+    ("multileader", "MultiLeader"),
+    ("ole2frame", "Ole2Frame"),
+    ("point", "Point"),
+    ("polyface_mesh", "PolyfaceMesh"),
+    ("polyfacemesh", "PolyfaceMesh"),
+    ("polygon_mesh", "PolygonMesh"),
+    ("polygonmesh", "PolygonMesh"),
+    ("polyline", "Polyline"),
+    ("polyline2d", "Polyline2D"),
+    ("polyline3d", "Polyline3D"),
+    ("raster_image", "RasterImage"),
+    ("rasterimage", "RasterImage"),
+    ("ray", "Ray"),
+    ("region", "Region"),
+    ("section_symbol", "SectionSymbol"),
+    ("sectionsymbol", "SectionSymbol"),
+    ("seqend", "Seqend"),
+    ("shape", "Shape"),
+    ("solid", "Solid"),
+    ("solid3d", "Solid3D"),
+    ("spline", "Spline"),
+    ("surface", "Surface"),
+    ("table", "Table"),
+    ("text", "Text"),
+    ("tolerance", "Tolerance"),
+    ("underlay", "Underlay"),
+    ("unknown", "Unknown"),
+    ("view_border", "ViewBorder"),
+    ("viewborder", "ViewBorder"),
+    ("viewport", "Viewport"),
+    ("wipeout", "Wipeout"),
+    ("xline", "XLine"),
+];
+
+fn entity_type_name_map() -> &'static HashMap<&'static str, &'static str> {
+    static MAP: OnceLock<HashMap<&str, &str>> = OnceLock::new();
+    MAP.get_or_init(|| ENTITY_TYPE_NAMES.iter().copied().collect())
+}
+
 /// Map a canonical entity kind to the registry type name.
 pub fn entity_type_name(kind: &str) -> &str {
-    match kind {
-        "line" => "Line",
-        "circle" => "Circle",
-        "lwpolyline" => "LwPolyline",
-        "arc" => "Arc",
-        "ellipse" => "Ellipse",
-        "point" => "Point",
-        "text" => "Text",
-        "mtext" => "MText",
-        "spline" => "Spline",
-        "polyline" => "Polyline",
-        "polyline2d" => "Polyline2D",
-        "polyline3d" => "Polyline3D",
-        "insert" => "Insert",
-        "hatch" => "Hatch",
-        _ => kind, // fallback for unknown / already-cased names
-    }
+    entity_type_name_map()
+        .get(kind)
+        .copied()
+        .unwrap_or(kind)
 }
 
 /// Validate an `EntityPayload` against the generated registry.
@@ -210,8 +260,8 @@ pub fn entity_type_name(kind: &str) -> &str {
 /// - `kind` maps to a known struct type.
 /// - `data` is a JSON object.
 /// - Every required field declared by the registry is present.
-///
-/// It does not type-check individual field values beyond JSON shape.
+/// - No unknown fields are present.
+/// - Each supplied field's JSON shape matches the declared type.
 pub fn validate_entity_payload(payload: &EntityPayload, registry: &TypeRegistry) -> Result<(), DocApiError> {
     let type_name = entity_type_name(&payload.kind);
     let info = registry
@@ -245,7 +295,87 @@ pub fn validate_entity_payload(payload: &EntityPayload, registry: &TypeRegistry)
         }
     }
 
+    let field_map: std::collections::HashMap<&str, &FieldInfo> =
+        info.fields.iter().map(|f| (f.name.as_str(), f)).collect();
+    for (key, value) in object {
+        let Some(field) = field_map.get(key.as_str()) else {
+            return Err(DocApiError::InvalidPayload {
+                message: format!(
+                    "unknown field '{}' on {}",
+                    key, type_name
+                ),
+            });
+        };
+        // Optional fields may be supplied as `null` even when the sample
+        // used to derive the registry contained a value.
+        if value.is_null() && !field.required {
+            continue;
+        }
+        if !json_value_matches_type_id(value, &field.type_id) {
+            return Err(DocApiError::InvalidPayload {
+                message: format!(
+                    "field '{}' on {} does not match type {}",
+                    key, type_name, field.type_id
+                ),
+            });
+        }
+    }
+
     Ok(())
+}
+
+/// Check whether a JSON value's shape matches a registry type id.
+///
+/// This is intentionally shallow: it catches obvious category mismatches
+/// (object vs array vs scalar) without requiring full nested schema lookups.
+fn json_value_matches_type_id(value: &serde_json::Value, type_id: &str) -> bool {
+    // Strip whitespace from generic arguments (e.g. "Map< String, EntityCommon >")
+    // without allocating a new String.
+    fn trim_id(s: &str) -> &str {
+        s.trim_matches(|c: char| c.is_whitespace())
+    }
+
+    let type_id = trim_id(type_id);
+    if type_id == "unknown" {
+        // The registry has no concrete type information for this field, so any
+        // supplied value is accepted rather than rejected because of a coarse
+        // fallback entry.
+        return true;
+    }
+    if type_id.starts_with("Option<") && type_id.ends_with('>') {
+        let inner = trim_id(&type_id["Option<".len()..type_id.len() - 1]);
+        return value.is_null() || json_value_matches_type_id(value, inner);
+    }
+    match value {
+        serde_json::Value::Null => type_id.starts_with("Option<"),
+        serde_json::Value::Bool(_) => type_id == "bool",
+        serde_json::Value::Number(_) => matches!(
+            type_id,
+            "f64" | "f32" | "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16"
+                | "u32" | "u64" | "u128"
+        ),
+        serde_json::Value::String(_) => type_id == "String" || type_id == "char",
+        serde_json::Value::Array(_) => {
+            type_id.starts_with("Vec<")
+                || type_id.starts_with("Tuple<")
+                || type_id.starts_with("Array<")
+                || type_id == "Array"
+        }
+        serde_json::Value::Object(_) => {
+            type_id.starts_with("Map<")
+                || type_id == "Object"
+                || (!type_id.starts_with("Vec<")
+                    && !type_id.starts_with("Tuple<")
+                    && !type_id.starts_with("Array<")
+                    && !type_id.starts_with("Option<")
+                    && !matches!(
+                        type_id,
+                        "bool" | "String" | "char" | "f64" | "f32" | "i8" | "i16" | "i32"
+                            | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128"
+                            | "unit" | "unknown"
+                    ))
+        }
+    }
 }
 
 /// Validate a list of operation metadata entries against the `DocOp` enum.

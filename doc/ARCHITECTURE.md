@@ -4,27 +4,46 @@ This document describes the high-level architecture of `ocs_doc_api` and how it 
 
 ## Goals
 
-1. Provide a stable, language-agnostic object model for `acadrust::CadDocument`.
+1. Provide a stable, language-agnostic object model for all first-level `acadrust::entities::EntityType` variants.
 2. Expose a transport-agnostic runtime API (`DocApi`) that can run in-process or over IPC.
 3. Keep the core crate free of `ocs_plugin_api` so it can be used by the kernel, the host, and plugins alike.
 4. Generate human-readable API documentation from the same source of truth as the code.
+5. Declare kernel capabilities in one hand-written file and merge them into the generated object model at build time.
 
 ## Layers
 
-```text
-┌─────────────────────────────────────────────┐
-│  Host / Plugin / CLI                        │
-│  uses DocApi trait or LocalDocApiClient     │
-├─────────────────────────────────────────────┤
-│  ocs_doc_api                                │
-│  • schema (TypeRegistry)                    │
-│  • doc_api (DocOp, Receipt, DocApi trait)   │
-│  • in_process (InProcessDocApi)              │
-│  • kernel_ops (KernelOps)                   │
-├─────────────────────────────────────────────┤
-│  acadrust  +  cadkernel                     │
-│  file format        geometry kernel         │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Caller
+        InProc["In-process caller"]
+        OutOfProc["Out-of-process caller"]
+    end
+
+    subgraph ocs_doc_api_crate["ocs_doc_api"]
+        Schema["schema.rs<br/>TypeRegistry"]
+        DocApiMod["doc_api.rs<br/>DocOp / Receipt / DocApi"]
+        InProcEngine["in_process.rs<br/>InProcessDocApi"]
+        KernelOpsMod["kernel_ops.rs<br/>KernelOps"]
+    end
+
+    subgraph IPCSubcrate["ocs_doc_api_ipc"]
+        LocalClient["LocalDocApiClient"]
+    end
+
+    subgraph Lower
+        Acadrust["acadrust<br/>file format"]
+        Cadkernel["cadkernel<br/>geometry kernel"]
+    end
+
+    InProc --> DocApiMod
+    DocApiMod --> InProcEngine
+    InProcEngine --> Schema
+    InProcEngine --> KernelOpsMod
+    InProcEngine --> Acadrust
+    KernelOpsMod --> Cadkernel
+    OutOfProc --> LocalClient
+    LocalClient -->|DocOp bytes| Dispatch["caller dispatch closure"]
+    Dispatch --> DocApiMod
 ```
 
 ## Core components
@@ -48,7 +67,7 @@ The public operation API:
 - `DocApi` trait — `execute(&mut self, op) -> Result<Receipt, DocApiError>`.
 - `DocApiExt` — typed convenience methods built on top of `DocApi`.
 - `EntityPayload` — serializable entity representation using `serde_json::Value`.
-- `validate_entity_payload` — checks an entity payload against the generated registry.
+- `validate_entity_payload` — checks an entity payload against the generated registry, rejects unknown fields, and performs shallow type checking of supplied field values.
 
 ### `in_process`
 
@@ -56,11 +75,12 @@ The public operation API:
 
 ### `kernel_ops`
 
-`KernelOps` is a trait that maps `acadrust` entity types to `cadkernel` geometry operations. Implementations are provided for the first-milestone capabilities:
+`KernelOps` is a trait that maps `acadrust` entity types to `cadkernel` geometry operations. Capabilities are declared in `kernel_capabilities.toml` and merged into the object model at build time. First-milestone capabilities:
 
-- `Line` → `to_planar_curve`
-- `Circle` → `to_planar_curve`
-- `LwPolyline` → `offset`
+- `to_planar_curve`: `Line`, `Circle`, `Arc`, `Ellipse`, `Spline`, `Polyline`, `Polyline2D`, `Polyline3D`, `LwPolyline`, `Ray`, `XLine`
+- `offset`: `LwPolyline`
+
+`Helix` is listed for `to_planar_curve` but deliberately returns `None` because a helix has no faithful planar projection. All `to_planar_curve` implementations currently require the entity extrusion normal to be the world +Z axis; other orientations return `None`.
 
 ### `ocs_doc_api_ipc`
 
@@ -68,29 +88,28 @@ The optional IPC subcrate provides `LocalDocApiClient`, a callback-based `DocApi
 
 ## Build pipeline
 
-```text
-acadrust (with serde)
-        │
-        ▼
-  serde-reflection
-        │
-        ▼
-  TypeRegistry (build.rs)
-        │
-        ├──► object_model.json  (embedded)
-        ├──► object_model_dispatch.rs  (included under kernel)
-        ├──► object_model_docs.md
-        └──► doc_api_ops.md
+```mermaid
+flowchart TD
+    acadrust["acadrust entities with serde"] --> serde_reflection["serde-reflection"]
+    serde_reflection --> registry["TypeRegistry in build.rs"]
+    json_fallback["JSON fallback for ACIS / unresolved shapes"] --> registry
+    kernel_caps["kernel_capabilities.toml"] --> registry
+    registry --> om_json["object_model.json (embedded compact)"]
+    registry --> om_dispatch["object_model_dispatch.rs (kernel feature)"]
+    registry --> om_md["object_model_docs.md"]
+    doc_ops_toml["doc_api_ops.toml"] --> ops_md["doc_api_ops.md"]
 ```
 
-`kernel_capabilities.toml` is merged into the registry at build time. If tracing fails, `build.rs` falls back to a minimal registry so the crate still compiles and tests can run.
+`kernel_capabilities.toml` is merged into the registry at build time.
+
+`build.rs` first tries to trace the `acadrust` object model with `serde-reflection`. For entity shapes that `serde-reflection` cannot finish (recursive ACIS data in `Solid3D`/`Region`/`Body`/`Surface`, unresolved optional boxes, etc.), it derives a registry entry from the entity's JSON serialization. This guarantees that every first-level `EntityType` variant has a shape entry while keeping the crate compiling and tests passing.
 
 ## Feature flags
 
 | Feature | Enables | Dependencies |
 |---|---|---|
-| (none) | Object model, registry, docs, payload validation | `serde`, `serde_json` |
-| `kernel` | `KernelOps` dispatch | `acadrust`, `cadkernel` |
+| (none) | Object model, parsed `TypeRegistry`, embedded Markdown docs, `validate_entity_payload` | `serde`, `serde_json` |
+| `kernel` | `KernelOps` trait and generated geometry dispatch | `acadrust`, `cadkernel` |
 | `engine` | `DocApi`, `InProcessDocApi`, `DocApiExt` | `kernel` |
 
 ## Future extensions
