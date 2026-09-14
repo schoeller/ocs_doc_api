@@ -72,7 +72,14 @@ name = "to_planar_curve"
 output = "Option<cadkernel::space::PlanarCurve>"
 ```
 
-The first milestone declares `to_planar_curve` for `Line`, `Circle`, `Arc`, `Ellipse`, `Spline`, `Polyline`, `Polyline2D`, `Polyline3D`, `LwPolyline`, `Ray`, and `XLine`, plus `offset` for `LwPolyline`. `Helix` is also listed for `to_planar_curve` but the implementation deliberately returns `None` because a helix has no planar projection.
+The capability file is grouped into categories:
+
+1. **Planar curve extraction** — `to_planar_curve` for `Line`, `Circle`, `Arc`, `Ellipse`, `Spline`, `Polyline`, `Polyline2D`, `Polyline3D`, `LwPolyline`, `Ray`, `XLine`, and `Helix`. `Helix` deliberately returns `None` because it has no faithful planar projection.
+2. **Planar annotation primitives** — `Point`, `Text`, `MText`, `Tolerance`, `AttributeDefinition`, `AttributeEntity`, and `Shape`. These are registered with `to_planar_curve` returning `None` so the registry records them as kernel-recognized annotation objects.
+3. **Hatch and filled boundaries** — `Hatch`, `Solid`, and `Wipeout`. `Hatch` and `Wipeout` use `to_planar_curve` with `None`; `Solid` uses `to_mesh` as a placeholder.
+4. **Block reference capabilities** — `Insert` supports `explode` and `bounding_box`; `Block` supports `bounding_box`. Both currently return empty / fallback values because block definitions are not available at the kernel layer in this milestone.
+5. **3-D solid / surface / mesh capabilities** — `Solid3D`, `Region`, `Body`, `Surface`, `Mesh`, `PolyfaceMesh`, `PolygonMesh`, and `Face3D` expose `to_mesh`. `Mesh` returns a copy of itself; the others return an empty mesh placeholder.
+6. **Offset** — `LwPolyline` and `Polyline2D` support `offset`.
 
 The build script validates that the entity string exists in the registry and attaches the capability to that type. Because the JSON-derived fallback runs before the capability merge, every declared entity is guaranteed to be present.
 
@@ -148,18 +155,37 @@ sequenceDiagram
 
 ### `src/kernel_ops.rs`
 
-`KernelOps` provides default no-op methods. Specific entity types override them:
+`KernelOps` is a small geometry-kernel trait with default fallbacks. Specific entity types override the methods that apply to them:
 
-- `Line::to_planar_curve` builds a `cadkernel::geom2d::Curve::Line` from `start`/`end`.
+#### Planar curve extraction (`to_planar_curve`)
+
+- `Line::to_planar_curve` builds a `cadkernel::geom2d::Curve::Line` from `start`/`end` when the line is level and uses the default +Z extrusion normal.
 - `Circle::to_planar_curve` builds a `cadkernel::geom2d::Curve::Circle` from `center`/`radius`.
 - `Arc::to_planar_curve` builds a `cadkernel::geom2d::Curve::Arc`.
 - `Ellipse::to_planar_curve` builds a `cadkernel::geom2d::Curve::Ellipse`.
-- `Spline::to_planar_curve` builds a `cadkernel::geom2d::Curve::Nurbs` from control or fit points.
+- `Spline::to_planar_curve` builds a `cadkernel::geom2d::Curve::Nurbs` from control or fit points when they are planar.
 - `Polyline`, `Polyline2D`, and `Polyline3D` build a `cadkernel::geom2d::Curve::Polyline`.
 - `Ray::to_planar_curve` and `XLine::to_planar_curve` build unbounded straight curves.
-- `LwPolyline::to_planar_curve` builds a `cadkernel::geom2d::Curve::Polyline`.
-- `LwPolyline::offset` converts to a `cadkernel::geom2d::Polyline`, calls `cadkernel::geom2d::offset::offset_polyline`, and converts each result back.
-- `Helix::to_planar_curve` deliberately returns `None`.
+- `LwPolyline::to_planar_curve` builds a `cadkernel::geom2d::Curve::Polyline` from its bulge vertices.
+- `Helix::to_planar_curve` deliberately returns `None` because a helix is not planar.
+
+#### Offset (`offset`)
+
+- `LwPolyline::offset` converts the entity to a `cadkernel::geom2d::Polyline`, calls `cadkernel::geom2d::offset::offset_polyline`, and converts each result back to a lightweight polyline.
+- `Polyline2D::offset` converts the 2-D heavy polyline into a temporary `LwPolyline`, offsets it, and returns the resulting polylines.
+
+#### Explode (`explode`)
+
+- `Insert::explode` is the only compound-entity implementation in the first milestone. It returns an empty vector because the block definition is not available in the kernel; the capability exists so callers know the operation is recognized.
+
+#### Tessellation (`to_mesh`)
+
+- `Mesh::to_mesh` returns a clone of itself.
+- `Solid3D`, `Region`, `Body`, `Surface`, `Face3D`, `PolyfaceMesh`, `PolygonMeshEntity`, and legacy 2-D `Solid` return a new empty `Mesh` as a placeholder while ACIS / procedural tessellation is not implemented.
+
+#### Dispatch (`AsKernelOps`)
+
+`AsKernelOps::as_kernel_ops` matches an `EntityType` variant and returns a `&dyn KernelOps` for the concrete entity. Only variants that have a `KernelOps` implementation are handled; everything else returns `None`.
 
 ### `src/convert.rs`
 
@@ -202,7 +228,7 @@ Tests live in `tests/` and are gated by feature flags:
 
 - `core_tests.rs` — always compiled; tests JSON parsing, capability lookup, registry round-trip, and embedded docs.
 - `engine_tests.rs` — compiled under `engine`; tests payload validation (unknown fields, type mismatch, missing required field), in-process offset, `doc_api_ops.toml` sync, and `round_trip_all_entities`, which iterates over the shared `src/entity_samples.rs` sample set so the round-trip tests and the build-time JSON fallback always cover the same entity surface.
-- `kernel_tests.rs` — compiled under `kernel`; tests `KernelOps` dispatch, including a `to_planar_curve` test for every declared curve entity and a TOML-driven test that verifies every entry in `kernel_capabilities.toml` is implemented by a concrete `KernelOps` method.
+- `kernel_tests.rs` — compiled under `kernel`; tests `KernelOps` dispatch, including a `to_planar_curve` test for every declared curve entity and a TOML-driven test that verifies every entry in `kernel_capabilities.toml` is implemented by a concrete `KernelOps` method. The TOML-driven test also validates `explode`, `to_mesh`, and `bounding_box` entries, and accepts `None` / empty results for capabilities marked as "not supported".
 
 The IPC subcrate has its own `tests/ipc_tests.rs`.
 
@@ -210,7 +236,9 @@ The IPC subcrate has its own `tests/ipc_tests.rs`.
 
 - The object model is complete for all first-level `EntityType` variants, but nested field type IDs are coarse (`Object`, `Array`, etc.) for shapes that came from the JSON fallback.
 - `KernelOps::to_planar_curve` returns a world-XY `PlanarCurve` only for entities whose extrusion normal is the world +Z axis and whose geometry is level. -Z normals are rejected (they would mirror the 2-D parameter space), and genuinely 3D shapes return `None`.
-- `OffsetEntity` only supports `LwPolyline` in the first milestone.
+- `OffsetEntity` supports `LwPolyline` and `Polyline2D` in the first milestone.
+- `KernelOps::explode` only supports `Insert` in the first milestone and returns an empty vector because the block definition is not available at the kernel layer.
+- `KernelOps::to_mesh` is implemented for all mesh / solid / surface entities but returns placeholder empty meshes for everything except `Mesh`, where it returns a clone.
 - File I/O operations (`OpenDocument`, `SaveDocument`) are not part of the current `DocOp` surface.
 - Typed payload builders are not generated; callers construct `serde_json::Value` payloads.
 - The committed Markdown docs are regenerated by `generate_docs`. CI (`.github/workflows/docs-check.yml`) fails if they drift from the build output.

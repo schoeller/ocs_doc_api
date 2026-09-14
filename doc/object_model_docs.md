@@ -46,6 +46,9 @@ Kind: `Struct`
 | `vertical_alignment` | `String` | no |
 | `width_factor` | `f64` | no |
 
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; text glyph extraction not supported)
+
 ## `AttributeEntity`
 
 Kind: `Struct`
@@ -75,6 +78,9 @@ Kind: `Struct`
 | `vertical_alignment` | `String` | no |
 | `width_factor` | `f64` | no |
 
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; text glyph extraction not supported)
+
 ## `Block`
 
 Kind: `Struct`
@@ -86,6 +92,9 @@ Kind: `Struct`
 | `description` | `String` | no |
 | `name` | `String` | no |
 | `xref_path` | `String` | no |
+
+Capabilities:
+- `bounding_box` → `acadrust::types::BoundingBox3D` (requires: block definition must be available (not supported))
 
 ## `BlockEnd`
 
@@ -108,6 +117,9 @@ Kind: `Struct`
 | `silhouettes` | `Array` | no |
 | `uid` | `String` | no |
 | `wires` | `Array` | no |
+
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: ACIS data available; tessellation not supported)
 
 ## `Circle`
 
@@ -208,6 +220,7 @@ Kind: `Enum`
 | `Line` | value: Line |
 | `Circle` | value: Circle |
 | `LwPolyline` | value: LwPolyline |
+| ... | (all first-level `acadrust::EntityType` variants) |
 
 ## `Extended`
 
@@ -248,6 +261,9 @@ Kind: `Struct`
 | `second_corner` | `Object` | no |
 | `third_corner` | `Object` | no |
 
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: triangular or quadrilateral face; tessellation not supported)
+
 ## `Handle`
 
 Kind: `NewTypeStruct`
@@ -278,6 +294,9 @@ Kind: `Struct`
 | `seed_points` | `Array` | no |
 | `style` | `String` | no |
 
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; boundary extraction not supported)
+
 ## `Helix`
 
 Kind: `Struct`
@@ -301,6 +320,33 @@ Capabilities:
 - `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: planar projection (not supported))
 
 ## `Insert`
+
+Kind: `Struct`
+
+| Field | Type | Required |
+|---|---|---|
+| `attributes` | `Array` | no |
+| `block_name` | `String` | no |
+| `column_count` | `f64` | no |
+| `column_spacing` | `f64` | no |
+| `common` | `Object` | no |
+| `dwg_minsert` | `bool` | no |
+| `insert_point` | `Object` | no |
+| `normal` | `Object` | no |
+| `rotation` | `f64` | no |
+| `row_count` | `f64` | no |
+| `row_spacing` | `f64` | no |
+| `seqend_handle` | `Option<unknown>` | no |
+| `view_rep_handle` | `Option<unknown>` | no |
+| `x_scale` | `f64` | no |
+| `y_scale` | `f64` | no |
+| `z_scale` | `f64` | no |
+
+Capabilities:
+- `explode` → `Vec<acadrust::entities::EntityType>` (requires: block definition must be available (not supported))
+- `bounding_box` → `acadrust::types::BoundingBox3D` (requires: block definition must be available (not supported))
+
+## `Leader`
 
 Kind: `Struct`
 
@@ -489,6 +535,9 @@ Kind: `Struct`
 | `style` | `String` | no |
 | `value` | `String` | no |
 
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; text glyph extraction not supported)
+
 ## `Mesh`
 
 Kind: `Struct`
@@ -503,6 +552,9 @@ Kind: `Struct`
 | `subdivision_level` | `f64` | no |
 | `version` | `f64` | no |
 | `vertices` | `Array` | no |
+
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: mesh data already available; copy returned)
 
 ## `MultiLeader`
 
@@ -580,6 +632,9 @@ Kind: `Struct`
 | `normal` | `Vector3` | yes |
 | `x_axis_angle` | `f64` | yes |
 
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; represented as point marker)
+
 ## `PolyfaceMesh`
 
 Kind: `Struct`
@@ -598,6 +653,9 @@ Kind: `Struct`
 | `thickness` | `f64` | no |
 | `vertices` | `Array` | no |
 
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: mesh data already available; copy returned)
+
 ## `PolygonMesh`
 
 Kind: `Struct`
@@ -614,6 +672,9 @@ Kind: `Struct`
 | `normal` | `Object` | no |
 | `smooth_type` | `String` | no |
 | `vertices` | `Array` | no |
+
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: mesh data already available; copy returned)
 
 ## `Polyline`
 
@@ -646,6 +707,7 @@ Kind: `Struct`
 
 Capabilities:
 - `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: planar)
+- `offset` → `Vec<acadrust::entities::LwPolyline>` (requires: planar, non-self-intersecting)
 
 ## `Polyline3D`
 
@@ -718,6 +780,9 @@ Kind: `Struct`
 | `uid` | `String` | no |
 | `wires` | `Array` | no |
 
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: ACIS data available; tessellation not supported)
+
 ## `SectionSymbol`
 
 Kind: `Struct`
@@ -768,6 +833,9 @@ Kind: `Struct`
 | `style_name` | `String` | no |
 | `thickness` | `f64` | no |
 
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; shape glyph extraction not supported)
+
 ## `Solid`
 
 Kind: `Struct`
@@ -783,6 +851,9 @@ Kind: `Struct`
 | `thickness` | `f64` | no |
 | `third_corner` | `Object` | no |
 
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: triangular or quadrilateral face; tessellation not supported)
+
 ## `Solid3D`
 
 Kind: `Struct`
@@ -796,6 +867,9 @@ Kind: `Struct`
 | `silhouettes` | `Array` | no |
 | `uid` | `String` | no |
 | `wires` | `Array` | no |
+
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: ACIS data available; tessellation not supported)
 
 ## `Spline`
 
@@ -840,6 +914,9 @@ Kind: `Struct`
 | `u_isolines` | `f64` | no |
 | `v_isolines` | `f64` | no |
 | `wires` | `Array` | no |
+
+Capabilities:
+- `to_mesh` → `Option<acadrust::entities::Mesh>` (requires: surface data available; tessellation not supported)
 
 ## `Table`
 
@@ -903,6 +980,9 @@ Kind: `Struct`
 | `vertical_alignment` | `String` | no |
 | `width_factor` | `f64` | no |
 
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; text glyph extraction not supported)
+
 ## `Tolerance`
 
 Kind: `Struct`
@@ -919,6 +999,9 @@ Kind: `Struct`
 | `normal` | `Object` | no |
 | `text` | `String` | no |
 | `text_height` | `f64` | no |
+
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; GD&T frame extraction not supported)
 
 ## `Transparency`
 
@@ -1072,6 +1155,9 @@ Kind: `Struct`
 | `size` | `Object` | no |
 | `u_vector` | `Object` | no |
 | `v_vector` | `Object` | no |
+
+Capabilities:
+- `to_planar_curve` → `Option<cadkernel::space::PlanarCurve>` (requires: not a curve; clipping boundary extraction not supported)
 
 ## `XDataValue`
 
